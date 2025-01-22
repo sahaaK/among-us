@@ -4,7 +4,12 @@ const { Server } = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+  cors: {
+    origin: '*', // Allow all origins (update this in production)
+    methods: ['GET', 'POST'],
+  },
+});
 
 // Store active rooms and players
 const rooms = {};
@@ -17,11 +22,17 @@ io.on('connection', (socket) => {
 
   // Join a room
   socket.on('joinRoom', (roomId, playerName) => {
+    console.log(`Player ${playerName} joining room ${roomId}`);
     socket.join(roomId);
+
     if (!rooms[roomId]) {
       rooms[roomId] = { players: [], impostor: null };
     }
+
+    // Add player to the room
     rooms[roomId].players.push({ id: socket.id, name: playerName, role: 'crewmate' });
+
+    // Notify all players in the room
     io.to(roomId).emit('updateRoom', rooms[roomId]);
   });
 
@@ -29,11 +40,15 @@ io.on('connection', (socket) => {
   socket.on('startGame', (roomId) => {
     const room = rooms[roomId];
     if (room.players.length >= 4) {
+      // Randomly assign one player as the impostor
       const impostorIndex = Math.floor(Math.random() * room.players.length);
       room.players[impostorIndex].role = 'impostor';
       room.impostor = room.players[impostorIndex].id;
+
+      // Notify all players in the room
       io.to(roomId).emit('gameStarted', room.players);
     } else {
+      // Not enough players to start the game
       io.to(roomId).emit('error', 'Not enough players to start the game.');
     }
   });
@@ -59,14 +74,24 @@ io.on('connection', (socket) => {
   socket.on('vote', (roomId, votedPlayerId) => {
     const room = rooms[roomId];
     if (!room.votes) room.votes = {};
+
+    // Record the vote
     room.votes[socket.id] = votedPlayerId;
+
+    // Check if all players have voted
     if (Object.keys(room.votes).length === room.players.length) {
       const voteCounts = {};
       for (const voter in room.votes) {
         const voted = room.votes[voter];
         voteCounts[voted] = (voteCounts[voted] || 0) + 1;
       }
-      const ejectedPlayerId = Object.keys(voteCounts).reduce((a, b) => voteCounts[a] > voteCounts[b] ? a : b);
+
+      // Determine the player with the most votes
+      const ejectedPlayerId = Object.keys(voteCounts).reduce((a, b) =>
+        voteCounts[a] > voteCounts[b] ? a : b
+      );
+
+      // Notify all players in the room
       io.to(roomId).emit('playerEjected', ejectedPlayerId);
     }
   });
@@ -74,13 +99,25 @@ io.on('connection', (socket) => {
   // Handle disconnections
   socket.on('disconnect', () => {
     console.log('A user disconnected:', socket.id);
+
+    // Remove the player from all rooms
     for (const roomId in rooms) {
-      rooms[roomId].players = rooms[roomId].players.filter(player => player.id !== socket.id);
-      if (rooms[roomId].players.length === 0) delete rooms[roomId];
-      else io.to(roomId).emit('updateRoom', rooms[roomId]);
+      rooms[roomId].players = rooms[roomId].players.filter(
+        (player) => player.id !== socket.id
+      );
+
+      // If the room is empty, delete it
+      if (rooms[roomId].players.length === 0) {
+        delete rooms[roomId];
+      } else {
+        // Notify remaining players in the room
+        io.to(roomId).emit('updateRoom', rooms[roomId]);
+      }
     }
   });
 });
 
 // Start the server
-server.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on port ${PORT}`);
+});
