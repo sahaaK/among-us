@@ -9,7 +9,7 @@ const io = new Server(server);
 // Store active rooms and players
 const rooms = {};
 
-// Use environment variable for port (required for cloud deployment)
+// Use environment variable for port (required for Render)
 const PORT = process.env.PORT || 3000;
 
 io.on('connection', (socket) => {
