@@ -9,16 +9,15 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: '*',
-    methods: ['GET', 'POST'],
-    credentials: true
+    methods: ['GET', 'POST']
   }
 });
-
 // Store active rooms and players
 const rooms = new Map();
 
 // Render-compatible port configuration
-const PORT = process.env.PORT || 10000; // Use Render's default port
+const PORT = process.env.PORT || 10000;
+const HOST = '0.0.0.0';// Use Render's default port
 
 // Generate random 5-character room ID
 function generateRoomId() {
@@ -115,11 +114,15 @@ socket.on('joinRoom', ({ roomId, playerName }) => {
     });
   };
 });
+// Add health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).send('OK');
+});
 
 // Start server with error handling
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`✅ Server bound to port ${PORT} on ${HOST}`);
 }).on('error', (err) => {
-  console.error('🔥 Server failed to start:', err);
+  console.error('🔥 Failed to start server:', err);
   process.exit(1);
 });
