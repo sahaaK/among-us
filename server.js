@@ -51,24 +51,24 @@ io.on('connection', (socket) => {
   });
 
   // Room joining handler
-  socket.on('joinRoom', ({ roomId, playerName }) => {
-    try {
-      if (!rooms.has(roomId)) {
-        throw new Error('Room not found');
-      }
-
-      const room = rooms.get(roomId);
-      room.players.set(socket.id, { name: playerName, role: 'crewmate' });
-      
-      socket.join(roomId);
-      console.log(`🎮 ${playerName} joined ${roomId}`);
-      updateRoomState(roomId);
-
-    } catch (error) {
-      console.error('Join room error:', error.message);
-      socket.emit('serverError', error.message);
-    }
-  });
+  // Join room handler
+socket.on('joinRoom', ({ roomId, playerName }) => {
+  if (!roomId || !playerName) {
+    return socket.emit('serverError', 'Invalid join parameters');
+  }
+  
+  if (rooms.has(roomId)) {
+    const room = rooms.get(roomId);
+    room.players.set(socket.id, { name: playerName, role: 'crewmate' });
+    
+    socket.join(roomId);
+    console.log(`🎮 ${playerName} joined ${roomId}`);
+    updateRoomState(roomId);
+  } else {
+    console.log(`🚫 Join failed: Room ${roomId} not found`);
+    socket.emit('serverError', 'Room not found');
+  }
+});
 
   // Game start handler
   socket.on('startGame', (roomId) => {
