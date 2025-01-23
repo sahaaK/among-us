@@ -17,23 +17,57 @@ const rooms = {};
 // Use environment variable for port (required for Render)
 const PORT = process.env.PORT || 3000;
 
+// Function to generate a random 5-letter room ID
+function generateRoomId() {
+  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let roomId = '';
+  for (let i = 0; i < 5; i++) {
+    roomId += characters.charAt(Math.floor(Math.random() * characters.length));
+  }
+  return roomId;
+}
+
 io.on('connection', (socket) => {
   console.log('A user connected:', socket.id);
 
-  // Join a room
-  socket.on('joinRoom', (roomId, playerName) => {
-    console.log(`Player ${playerName} joining room ${roomId}`);
-    socket.join(roomId);
+  // Log all events for debugging
+  socket.onAny((event, ...args) => {
+    console.log(`Event: ${event}, Args:`, args);
+  });
 
-    if (!rooms[roomId]) {
-      rooms[roomId] = { players: [], impostor: null };
-    }
+  // Create a new room
+  socket.on('createRoom', (playerName) => {
+    const roomId = generateRoomId();
+    rooms[roomId] = { players: [], impostor: null, votes: {} };
 
-    // Add player to the room
+    // Add the player to the room
     rooms[roomId].players.push({ id: socket.id, name: playerName, role: 'crewmate' });
 
-    // Notify all players in the room
-    io.to(roomId).emit('updateRoom', rooms[roomId]);
+    // Notify the player of the room ID
+    socket.emit('roomCreated', roomId);
+
+    // Join the room
+    socket.join(roomId);
+    console.log(`Room ${roomId} created by ${playerName}`);
+  });
+
+  // Join an existing room
+  socket.on('joinRoom', (roomId, playerName) => {
+    if (rooms[roomId]) {
+      // Add the player to the room
+      rooms[roomId].players.push({ id: socket.id, name: playerName, role: 'crewmate' });
+
+      // Notify all players in the room
+      io.to(roomId).emit('updateRoom', { ...rooms[roomId], roomId });
+
+      // Join the room
+      socket.join(roomId);
+      console.log(`${playerName} joined room ${roomId}`);
+    } else {
+      // Notify the player that the room doesn't exist
+      socket.emit('serverError', 'Room not found');
+      console.log(`Join failed: Room ${roomId} not found`);
+    }
   });
 
   // Assign roles (Impostor and Crewmates)
@@ -47,9 +81,11 @@ io.on('connection', (socket) => {
 
       // Notify all players in the room
       io.to(roomId).emit('gameStarted', room.players);
+      console.log(`Game started in room ${roomId}`);
     } else {
       // Not enough players to start the game
-      io.to(roomId).emit('error', 'Not enough players to start the game.');
+      io.to(roomId).emit('serverError', 'Not enough players to start the game.');
+      console.log(`Game start failed: Not enough players in room ${roomId}`);
     }
   });
 
@@ -57,18 +93,21 @@ io.on('connection', (socket) => {
   socket.on('completeTask', (roomId, taskId) => {
     const room = rooms[roomId];
     io.to(roomId).emit('taskCompleted', { playerId: socket.id, taskId });
+    console.log(`Task ${taskId} completed by player ${socket.id} in room ${roomId}`);
   });
 
   socket.on('sabotage', (roomId) => {
     const room = rooms[roomId];
     if (socket.id === room.impostor) {
       io.to(roomId).emit('sabotageTriggered');
+      console.log(`Sabotage triggered by impostor in room ${roomId}`);
     }
   });
 
   // Handle voting
   socket.on('callMeeting', (roomId) => {
     io.to(roomId).emit('meetingCalled', socket.id);
+    console.log(`Meeting called by player ${socket.id} in room ${roomId}`);
   });
 
   socket.on('vote', (roomId, votedPlayerId) => {
@@ -93,6 +132,10 @@ io.on('connection', (socket) => {
 
       // Notify all players in the room
       io.to(roomId).emit('playerEjected', ejectedPlayerId);
+      console.log(`Player ${ejectedPlayerId} ejected from room ${roomId}`);
+
+      // Reset votes
+      room.votes = {};
     }
   });
 
@@ -109,9 +152,10 @@ io.on('connection', (socket) => {
       // If the room is empty, delete it
       if (rooms[roomId].players.length === 0) {
         delete rooms[roomId];
+        console.log(`Room ${roomId} deleted`);
       } else {
         // Notify remaining players in the room
-        io.to(roomId).emit('updateRoom', rooms[roomId]);
+        io.to(roomId).emit('updateRoom', { ...rooms[roomId], roomId });
       }
     }
   });
