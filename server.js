@@ -15,7 +15,7 @@ const io = new Server(server, {
 const rooms = {};
 
 // Use environment variable for port (required for Render)
-const PORT = process.env.PORT || 3000; // Default to 3000 for local testing
+const PORT = process.env.PORT || 4000; // Default to 3000 for local testing
 
 // Function to generate a random 5-letter room ID
 function generateRoomId() {
